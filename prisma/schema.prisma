@@ -1,0 +1,114 @@
+// 大地观察哨 — 数据库 Schema
+// MVP: SQLite | 生产: PostgreSQL
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ============================================================
+//  基金项目
+// ============================================================
+model Project {
+  id                    String   @id @default(cuid())
+  projectNumber         String   @unique
+  title                 String
+  category              String   // 重点项目 | 一般项目 | 青年项目 | 西部项目
+  discipline            String
+  subDiscipline         String?
+  amount                Float    // 资助金额（万元）
+  principalInvestigator String
+  institution           String
+  startDate             DateTime
+  plannedEndDate        DateTime
+  actualEndDate         DateTime?
+
+  // 预计算效率指标
+  taxpayerEquivalent Float  // 纳税人等值（人数）
+  citationCost       Float? // 单次引用成本（元/次）。null = 引用为0 → 无穷大
+  dailyBurnRate      Float  // 日均消耗（元/天）
+
+  // 数据溯源
+  sourceUrl       String?
+  dataCollectedAt DateTime @default(now())
+  dataUpdatedAt   DateTime @default(now())
+
+  // 关联
+  papers Paper[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+//  结项论文
+// ============================================================
+model Paper {
+  id               String  @id @default(cuid())
+  projectId        String
+  project          Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title            String
+  journal          String
+  year             Int
+  citationCount    Int     @default(0)
+  downloadCount    Int     @default(0)
+  cnkiUrl          String?
+  originalAbstract String? // 原始摘要（用于引用标注）
+  dewateredSummary String  // AI 生成脱水版一句话摘要
+  aiGeneratedNote  String? // AI 生成标注（如"机器生成，可能不准确"）
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+// ============================================================
+//  关键词 — 用于热词金额墙
+// ============================================================
+model Keyword {
+  id           String @id @default(cuid())
+  word         String @unique
+  totalFunding Float  @default(0) // 该关键词关联项目总资助额（万元）
+  projectCount Int    @default(0) // 该关键词关联项目数
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ============================================================
+//  公众感受投票（V1.1）
+// ============================================================
+model Vote {
+  id        String   @id @default(cuid())
+  projectId String
+  dimension String   // "comprehensibility"（可理解度）| "relevance"（生活相关度）
+  score     Int      // 1–10
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
+// ============================================================
+//  匿名投稿（V1.3）
+// ============================================================
+model AnonymousTip {
+  id        String   @id @default(cuid())
+  content   String
+  status    String   @default("pending") // pending | approved | rejected
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+}
+
+// ============================================================
+//  碎纸机基准值（用于首页实时消耗计算）
+// ============================================================
+model SiteConfig {
+  id                 String   @id @default("main")
+  dailyBaselineAmount Float   @default(0) // 进行中项目日均总消耗（元）
+  dailyBaselineDate   DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
