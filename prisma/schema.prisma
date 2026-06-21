@@ -1,4 +1,5 @@
-// 大地观察哨 — 数据库 Schema
+// 大地观察哨 v2 — 数据库 Schema
+// 支持六维学术公共问责指标体系
 // MVP: SQLite | 生产: PostgreSQL
 
 generator client {
@@ -17,7 +18,7 @@ model Project {
   id                    String   @id @default(cuid())
   projectNumber         String   @unique
   title                 String
-  category              String   // 重点项目 | 一般项目 | 青年项目 | 西部项目
+  category              String   // 重点项目 | 一般项目 | 青年项目 | 西部项目 | 重大项目
   discipline            String
   subDiscipline         String?
   amount                Float    // 资助金额（万元）
@@ -27,21 +28,45 @@ model Project {
   plannedEndDate        DateTime
   actualEndDate         DateTime?
 
-  // 预计算效率指标
-  taxpayerEquivalent Float  // 纳税人等值（人数）
-  citationCost       Float? // 单次引用成本（元/次）。null = 引用为0 → 无穷大
-  dailyBurnRate      Float  // 日均消耗（元/天）
+  // ---- 维度一：内部效率 ----
+  totalCitations       Int     @default(0)  // 总被引次数
+  selfCitations        Int     @default(0)  // 自引次数
+  externalCitations    Int     @default(0)  // 他引次数
+  citationCost         Float?              // 引用成本（元/次），null = 引用为0 → 无穷大
+  citationConcentration Float?             // 篇均他引次数
+  zeroCitationRatio    Float?              // 零引论文占比（0-1）
 
-  // 数据溯源
-  sourceUrl       String?
-  dataCollectedAt DateTime @default(now())
-  dataUpdatedAt   DateTime @default(now())
+  // ---- 维度二：传播半径 ----
+  sameDisciplineCitationRatio  Float?      // 同二级学科引用占比（0-1）
+  sameInstitutionCitationRatio Float?      // 同机构引用占比（0-1）
+  crossDisciplineCitations     Int  @default(0) // 跨学科引用次数
 
-  // 关联
-  papers Paper[]
+  // ---- 维度三：公共牵引力 ----
+  nonAcademicMentions   Int     @default(0)  // 非学术引用（新闻/政策/智库）
+  isFreeToRead          Boolean @default(false) // 是否免费可读
+  publicDiscussionCount Int     @default(0)  // 公共平台讨论次数
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // ---- 维度四：承诺兑现度 ----
+  plannedDurationDays   Int?    // 计划研究周期（天）
+  actualDurationDays    Int?    // 实际研究周期（天）
+  completionDelay       Int?    // 延期天数（负数=提前完成）
+  promisedPaperCount    Int?    // 承诺论文数（来自申请书）
+  actualPaperCount      Int     @default(0) // 实际论文数
+  outputShrinkage       Float?  // 成果缩水率（0-1），null=无可比数据
+
+  // ---- 预计算综合评分 ----
+  overallScore      Float?      // 综合公共问责评分（0-100）
+  radarData         String?     // 六维雷达图数据 JSON
+
+  // ---- 数据溯源 ----
+  sourceUrl         String?
+  dataCollectedAt   DateTime  @default(now())
+  dataUpdatedAt     DateTime  @default(now())
+  dataVersion       String    @default("2.0")
+
+  papers            Paper[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 }
 
 // ============================================================
@@ -52,14 +77,26 @@ model Paper {
   projectId        String
   project          Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   title            String
-  journal          String
-  year             Int
+  journal          String?
+  year             Int?
   citationCount    Int     @default(0)
   downloadCount    Int     @default(0)
   cnkiUrl          String?
-  originalAbstract String? // 原始摘要（用于引用标注）
-  dewateredSummary String  // AI 生成脱水版一句话摘要
-  aiGeneratedNote  String? // AI 生成标注（如"机器生成，可能不准确"）
+
+  // 引用来源分析
+  selfCitation        Boolean @default(false) // 是否来自项目组自引
+  citingDisciplines   String?               // 引用来源学科列表（JSON 数组）
+  citingInstitutions  String?               // 引用来源机构列表（JSON 数组）
+
+  // AI 生成
+  originalAbstract String?
+  dewateredSummary String? // AI 脱水版一句话摘要
+  aiGeneratedNote  String? // AI 生成标注
+  publicRelevanceScore Int? // 公共相关性评分（0-100）
+
+  // 公共可见性
+  isFreeToRead        Boolean @default(false)
+  nonAcademicMentions Int     @default(0)
 
   createdAt DateTime @default(now())
 
@@ -67,16 +104,15 @@ model Paper {
 }
 
 // ============================================================
-//  关键词 — 用于热词金额墙
+//  关键词 — 热词金额墙
 // ============================================================
 model Keyword {
-  id           String @id @default(cuid())
-  word         String @unique
-  totalFunding Float  @default(0) // 该关键词关联项目总资助额（万元）
-  projectCount Int    @default(0) // 该关键词关联项目数
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String  @id @default(cuid())
+  word         String  @unique
+  totalFunding Float   @default(0)
+  projectCount Int     @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 // ============================================================
@@ -85,7 +121,7 @@ model Keyword {
 model Vote {
   id        String   @id @default(cuid())
   projectId String
-  dimension String   // "comprehensibility"（可理解度）| "relevance"（生活相关度）
+  dimension String   // comprehensibility | relevance
   score     Int      // 1–10
   createdAt DateTime @default(now())
 
@@ -96,19 +132,19 @@ model Vote {
 //  匿名投稿（V1.3）
 // ============================================================
 model AnonymousTip {
-  id        String   @id @default(cuid())
-  content   String
-  status    String   @default("pending") // pending | approved | rejected
+  id         String   @id @default(cuid())
+  content    String
+  status     String   @default("pending") // pending | approved | rejected
   reviewedAt DateTime?
-  createdAt DateTime @default(now())
+  createdAt  DateTime @default(now())
 }
 
 // ============================================================
-//  碎纸机基准值（用于首页实时消耗计算）
+//  站点配置（碎纸机基准值等）
 // ============================================================
 model SiteConfig {
-  id                 String   @id @default("main")
-  dailyBaselineAmount Float   @default(0) // 进行中项目日均总消耗（元）
+  id                  String   @id @default("main")
+  dailyBaselineAmount Float    @default(0)
   dailyBaselineDate   DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }

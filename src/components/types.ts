@@ -1,29 +1,65 @@
-/** 项目卡片 Props — 对应未来 Prisma schema */
-export interface ProjectPaper {
+/** 大地观察哨 v2 — 前端类型定义 */
+
+export interface PaperData {
+  id: string;
   title: string;
-  journal: string;
-  year: number;
+  journal: string | null;
+  year: number | null;
   citationCount: number;
   downloadCount: number;
-  cnkiUrl: string;
-  dewateredSummary: string; // AI 脱水版一句话摘要
+  cnkiUrl: string | null;
+  selfCitation: boolean;
+  citingDisciplines: string[];
+  citingInstitutions: string[];
+  nonAcademicMentions: number;
+  isFreeToRead: boolean;
+  dewateredSummary: string | null;
+  publicRelevanceScore: number | null;
 }
 
-export interface Project {
+export interface ProjectData {
   id: string;
   projectNumber: string;
   title: string;
-  category: string; // "重点项目" | "一般项目" | "青年项目"
+  category: string;
   discipline: string;
-  amount: number; // 万元
+  amount: number;
   principalInvestigator: string;
   institution: string;
-  startDate: string; // ISO date
+  startDate: string;
   plannedEndDate: string;
-  papers: ProjectPaper[];
+  actualEndDate: string | null;
 
-  // 预计算效率指标
-  taxpayerEquivalent: number; // 纳税人等值
-  citationCost: number | null; // 单次引用成本（null 表示引用为 0 → ∞）
-  dailyBurnRate: number; // 日均消耗（元/天）
+  // 维度一：内部效率
+  totalCitations: number;
+  selfCitations: number;
+  externalCitations: number;
+  citationCost: number | null;
+  citationConcentration: number | null;
+  zeroCitationRatio: number | null;
+
+  // 维度二：传播半径
+  sameDisciplineCitationRatio: number | null;
+  sameInstitutionCitationRatio: number | null;
+  crossDisciplineCitations: number;
+
+  // 维度三：公共牵引力
+  nonAcademicMentions: number;
+  isFreeToRead: boolean;
+  publicDiscussionCount: number;
+
+  // 维度四：承诺兑现度
+  plannedDurationDays: number | null;
+  actualDurationDays: number | null;
+  completionDelay: number | null;
+  promisedPaperCount: number | null;
+  actualPaperCount: number;
+  outputShrinkage: number | null;
+
+  // 综合
+  overallScore: number | null;
+  radarData: [string, number][] | null;
+
+  // 关联
+  papers: PaperData[];
 }
