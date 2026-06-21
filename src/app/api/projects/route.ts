@@ -8,6 +8,15 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(request: NextRequest) {
   try {
+    // 生产环境无数据库时返回静态数据
+    if (process.env.NODE_ENV !== "development") {
+      return NextResponse.json({
+        data: [],
+        pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+        message: "生产环境暂不支持数据库查询，请访问首页查看静态数据",
+      });
+    }
+
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get("page") || "1");
     const limit = parseInt(searchParams.get("limit") || "20");
